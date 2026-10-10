@@ -29,7 +29,7 @@ This copy does not update itself. After changing indicer upstream:
 
 ```bash
 cd ../indicer-hetero-match && git rev-parse HEAD      # note the new commit
-cp -r indicer/pipeline indicer/quorum indicer/__init__.py ../seva-governance/indicer/
+cp -r indicer/pipeline indicer/quorum indicer/__init__.py ../maha-seva-governance/indicer/
 # update the commit hash in the table above, then run the tests
 ```
 

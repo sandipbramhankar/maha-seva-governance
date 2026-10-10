@@ -1,4 +1,4 @@
-# seva-governance
+# maha-seva-governance
 
 Ticket-based governance for Maharashtra citizen services.
 
