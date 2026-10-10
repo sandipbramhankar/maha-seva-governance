@@ -231,6 +231,56 @@ button.btn:focus-visible, select:focus-visible, input:focus-visible {
 }
 .link:hover { text-decoration: underline; }
 
+/* ---------- officer desk ---------- */
+.desk {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 12px 13px 13px;
+}
+.desk > h3 { border-bottom-color: var(--line); }
+.desk-note { font-size: 12.5px; color: var(--ink-2); margin: 0 0 9px; line-height: 1.5; }
+.desk-caveat { display: block; color: var(--ink-3); font-size: 11.5px; margin-top: 3px; }
+
+.flags { display: flex; flex-direction: column; gap: 7px; margin-bottom: 11px; }
+.flags.needs { outline: 2px solid var(--crit); outline-offset: 3px; border-radius: 4px; }
+.flag {
+  display: flex; gap: 9px; align-items: flex-start; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line);
+  border-left: 3px solid var(--warn); border-radius: 4px; padding: 8px 10px;
+}
+.flag.decisive { border-left-color: var(--crit); }
+.flag:hover { border-color: var(--accent); }
+.flag input { margin-top: 2px; flex: none; }
+.flag-head {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  font-size: 12.5px; font-weight: 600; color: var(--ink);
+}
+.flag-why { display: block; font-size: 12px; color: var(--ink-2); margin-top: 3px; line-height: 1.45; }
+.flag-src {
+  display: block; font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--ink-3); margin-top: 4px;
+}
+
+.desk-label {
+  display: block; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--ink-3); font-weight: 600; margin-bottom: 4px;
+}
+.desk-remark {
+  width: 100%; font-family: var(--font-body); font-size: 12.5px; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  padding: 7px 9px; resize: vertical; line-height: 1.5;
+}
+.desk-remark:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.desk-remark.needs { border-color: var(--crit); background: var(--crit-bg); }
+
+.desk-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+button.btn.danger { color: var(--crit); border-color: var(--line); }
+button.btn.danger:hover { border-color: var(--crit); background: var(--crit-bg); }
+button.btn[disabled] { opacity: 0.55; cursor: progress; }
+
+.desk-msg { font-size: 12.5px; margin-top: 9px; line-height: 1.5; }
+.desk-msg.bad { color: var(--crit); background: var(--crit-bg); padding: 8px 10px; border-radius: 4px; }
+.desk-msg.good { color: var(--good); background: var(--good-bg); padding: 8px 10px; border-radius: 4px; }
+
 /* ---------- drawer ---------- */
 .scrim {
   position: fixed; inset: 0; background: rgba(8,10,14,.5);

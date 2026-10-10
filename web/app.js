@@ -18,6 +18,19 @@ async function api(path) {
   return r.json();
 }
 
+/* Hands back the parsed body whatever the status: a refusal (422) carries the
+   field to mark and is not an error to throw on. */
+async function post(path, body) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await r.json(); } catch { /* no body */ }
+  return { ok: r.ok, status: r.status, data };
+}
+
 const STATE = { data: {}, district: null, dept: "" };
 
 /* ------------------------------------------------------------------ KPIs */
@@ -495,6 +508,120 @@ function renderDetail(d) {
     </div>` : ""}`;
 }
 
+/* --------------------------------------------------------- officer desk */
+
+/* The desk the officer holding this file actually works at.
+
+   An officer may always overrule the engine. What this panel makes impossible
+   is doing it silently: every decisive flag has to be ticked and answered
+   before the file moves, and the reason goes into the audit chain under the
+   officer's name. */
+
+function renderDesk(f) {
+  if (f.closed) {
+    return `<div class="sect"><h3>Officer desk</h3>
+      <p class="desk-note">This file is closed. Nothing further can be
+      recorded against it.</p></div>`;
+  }
+  if (!f.held_by) {
+    return `<div class="sect"><h3>Officer desk</h3>
+      <p class="desk-note">This file is not on any desk right now.</p></div>`;
+  }
+
+  const decisive = f.flags.filter((x) => x.severity === "decisive");
+  const advisory = f.flags.filter((x) => x.severity !== "decisive");
+
+  const flagRow = (x) => `
+    <label class="flag ${x.severity}">
+      <input type="checkbox" class="desk-flag" value="${esc(x.key)}">
+      <span>
+        <span class="flag-head">${esc(x.label)}
+          <span class="pill ${x.severity === "decisive" ? "red" : "yellow"}">
+            ${x.severity === "decisive" ? "blocks" : "advisory"}</span></span>
+        <span class="flag-why">${esc(x.detail)}</span>
+        <span class="flag-src">${esc(x.sources.join(" · "))}</span>
+      </span>
+    </label>`;
+
+  const flagBlock = f.flags.length ? `
+    <p class="desk-note">
+      ${decisive.length
+        ? `The record contradicts this application on ${decisive.length}
+           point(s) that must be answered before it moves on. Tick each one
+           you are overriding and say why the record is wrong or does not
+           apply.`
+        : `Nothing here blocks the file. These are noted for your attention.`}
+    </p>
+    <div class="flags">${[...decisive, ...advisory].map(flagRow).join("")}</div>
+  ` : `<p class="desk-note">Nothing was raised on this file. Forwarding it
+       needs no reason.</p>`;
+
+  return `
+    <div class="sect desk" data-seva="${esc(f.seva_id)}"
+         data-officer="${esc(f.held_by.officer_id)}">
+      <h3>Officer desk &mdash; ${esc(f.role || f.stage)}</h3>
+      <p class="desk-note">
+        Acting as <strong>${esc(f.held_by.name)}</strong>
+        (${esc(f.held_by.officer_id)}), who holds this file.
+        <span class="desk-caveat">Stands in for a login; a deployment takes
+        the officer from the authenticated session, never from the page.</span>
+      </p>
+
+      ${flagBlock}
+
+      <label class="desk-label" for="desk-remark">
+        Reason ${decisive.length ? "(required)" : "(optional)"}
+      </label>
+      <textarea id="desk-remark" class="desk-remark" rows="3"
+        placeholder="What the record misses, or why it does not apply here."></textarea>
+
+      <div class="desk-actions">
+        <button class="btn" data-act="forward">Forward to next desk</button>
+        <button class="btn danger" data-act="reject">Refuse</button>
+      </div>
+      <div class="desk-msg" id="desk-msg" role="status"></div>
+    </div>`;
+}
+
+async function submitDecision(action) {
+  const desk = $(".desk");
+  if (!desk) return;
+  const msg = $("#desk-msg");
+  const seva = desk.dataset.seva;
+
+  msg.className = "desk-msg";
+  msg.textContent = "Recording…";
+  $$(".desk .btn").forEach((b) => (b.disabled = true));
+
+  const { ok, data } = await post(
+    `/api/tickets/${encodeURIComponent(seva)}/action`,
+    {
+      officer_id: desk.dataset.officer,
+      action,
+      remark: $("#desk-remark").value,
+      overrode: $$(".desk-flag").filter((c) => c.checked).map((c) => c.value),
+    },
+  );
+
+  $$(".desk .btn").forEach((b) => (b.disabled = false));
+
+  if (!ok) {
+    msg.className = "desk-msg bad";
+    msg.textContent = data.error || `Refused (${data.detail || "unknown"}).`;
+    const target = { remark: "#desk-remark", overrode: ".flags" }[data.field];
+    if (target) $(target)?.classList.add("needs");
+    return;
+  }
+
+  msg.className = "desk-msg good";
+  msg.textContent =
+    `Recorded. ${data.from_stage} → ${data.to_stage}` +
+    (data.overrode.length
+      ? ` · ${data.overrode.length} flag(s) overridden under your name.`
+      : ".");
+  setTimeout(() => openTicket(seva), 900);
+}
+
 async function openTicket(sevaId) {
   const drawer = $("#drawer"), scrim = $("#scrim");
   $("#dr-title").textContent = "Loading…";
@@ -504,9 +631,19 @@ async function openTicket(sevaId) {
   drawer.setAttribute("aria-hidden", "false");
 
   try {
-    const d = await api(`/api/tickets/${encodeURIComponent(sevaId)}`);
+    const [d, flags] = await Promise.all([
+      api(`/api/tickets/${encodeURIComponent(sevaId)}`),
+      api(`/api/tickets/${encodeURIComponent(sevaId)}/flags`),
+    ]);
     $("#dr-title").textContent = `${d.citizen} · ${d.service}`;
-    $("#dr-body").innerHTML = renderDetail(d);
+    $("#dr-body").innerHTML = renderDesk(flags) + renderDetail(d);
+
+    $$(".desk .btn").forEach((b) =>
+      b.addEventListener("click", () => submitDecision(b.dataset.act)));
+    $("#desk-remark")?.addEventListener("input", (e) =>
+      e.target.classList.remove("needs"));
+    $$(".desk-flag").forEach((c) =>
+      c.addEventListener("change", () => $(".flags")?.classList.remove("needs")));
   } catch (err) {
     $("#dr-title").textContent = "Could not open file";
     $("#dr-body").innerHTML = `<div class="err">${esc(err.message)}</div>`;

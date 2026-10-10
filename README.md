@@ -45,7 +45,7 @@ statutory period under the Maharashtra Right to Public Services Act, 2015.
 ```bash
 pip install -r requirements-dev.txt
 
-python -m pytest -q                              # 68 tests
+python -m pytest -q                              # 104 tests
 uvicorn seva.api.main:app --reload               # dashboard at http://127.0.0.1:8000
 ```
 
@@ -97,6 +97,43 @@ a high average must never bury a specific red flag.
 
 Whether income is decisive depends on the claim. An OBC claim is subject to the
 creamy layer, so income decides; an SC claim is not, so it does not.
+
+---
+
+## The officer desk
+
+An officer may always overrule the engine. That is deliberate: repositories are
+wrong often enough that a system which could not be overruled would be worse
+than the one it replaces. A Talathi who knows the family, or has seen a
+document the databases never captured, must be able to pass a flagged file.
+
+What they may not do is overrule it silently. Before a flagged file moves on,
+`seva/workflow/overrides.py` requires three things:
+
+| | |
+|---|---|
+| the officer holds the file | only the open desk can act on it |
+| each flag is named | a blanket approval is not an answer |
+| a reason is given | recorded, attributed, and counted |
+
+A clean application costs the officer no extra keystrokes: the common case
+should not be taxed to catch the rare one.
+
+The reason is checked for substance only lightly, by a minimum length and a
+list of stock phrases that say nothing. That limit is worth stating plainly,
+because no validator can tell a considered justification from a
+plausible-sounding one. The deterrent is not the check. It is that the text is
+attributed, permanent and counted, so an officer who waves through forty flags
+appears on the Integrity view whatever they typed.
+
+```
+GET  /api/tickets/{seva_id}/flags     what must be answered
+POST /api/tickets/{seva_id}/action    forward | approve | reject | return
+GET  /api/officers                    stands in for a login
+```
+
+A refusal returns 422 naming the offending field, so the interface marks the
+control that needs attention rather than showing one message over the form.
 
 ---
 
@@ -220,12 +257,13 @@ seva/
 │   └── orchestrator.py    assess() — runs the whole stack
 ├── workflow/
 │   ├── stages.py          stage chains, officers, open/close
+│   ├── overrides.py       what an officer must answer before a file moves
 │   └── sla.py             RTS Act clock
 └── api/main.py            FastAPI app and static dashboard
 
 indicer/                   vendored identity-resolution engine (see VENDORED.md)
 web/                       dashboard (vanilla JS, no build step)
-tests/                     68 tests
+tests/                     104 tests
 ```
 
 ---
@@ -234,8 +272,10 @@ tests/                     68 tests
 
 - **Persistence.** Everything is in memory; the store reseeds on restart.
 - **Real source adapters.** All seven read `DataFabric`.
-- **Authentication.** No officer login; the override path is modelled but not
-  gated.
+- **Authentication.** No officer login. The override rules are built and
+  enforced, but `/api/officers` takes the officer's identity from the client,
+  so as it stands any caller can act as any officer. This is the one piece
+  that must be replaced before the platform touches a real file.
 
 ---
 

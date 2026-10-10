@@ -30,6 +30,7 @@ from seva.engine.orchestrator import assess
 from seva.engine.audit import AuditChain
 from seva.workflow.stages import STAGE_ROLE, chain_for
 from seva.workflow.sla import read_clock
+from seva.workflow.overrides import OverrideRefused, open_flags, perform
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 
@@ -233,6 +234,115 @@ def list_tickets(district: Optional[str] = None,
         rows = [v for v in rows if v.flag.value == flag]
     rows.sort(key=lambda v: -v.age_days)
     return [v.as_dict() for v in rows[:limit]]
+
+
+# ---------------------------------------------------------------------------
+# Officer desk
+# ---------------------------------------------------------------------------
+
+@app.get("/api/officers")
+def officers(district: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Officers on record, for the demonstration desk picker.
+
+    This stands in for authentication. A deployment authenticates against the
+    state directory and derives the officer from the session; it never accepts
+    an officer identity from the client, which is what this endpoint does and
+    why it is not suitable as it stands.
+    """
+    rows = STORE.officers.all_officers()
+    if district:
+        if district not in DISTRICT_BY_NAME:
+            raise HTTPException(400, f"Unknown district: {district}")
+        rows = [o for o in rows if o.district == district]
+    return [
+        {"officer_id": o.officer_id, "name": o.name, "role": o.role,
+         "district": o.district, "taluka": o.taluka}
+        for o in sorted(rows, key=lambda o: o.officer_id)
+    ]
+
+
+@app.get("/api/tickets/{seva_id}/flags")
+def ticket_flags(seva_id: str) -> Dict[str, Any]:
+    """
+    What the officer holding this file has to answer before it moves on.
+
+    An empty `flags` list is the ordinary case: a clean application costs the
+    officer no extra keystrokes.
+    """
+    if not seva_id_valid(seva_id):
+        raise HTTPException(400, f"{seva_id} is not a valid Seva ID.")
+    ticket = STORE.get(seva_id)
+    if ticket is None:
+        raise HTTPException(404, f"No ticket with Seva ID {seva_id}")
+
+    flags = open_flags(ticket)
+    holder = next((e for e in reversed(ticket.history) if e.is_open), None)
+    return {
+        "seva_id": seva_id,
+        "stage": ticket.current_stage.value,
+        "role": STAGE_ROLE.get(ticket.current_stage, ""),
+        "closed": ticket.is_closed,
+        "held_by": (
+            {"officer_id": holder.officer_id, "name": holder.officer_name}
+            if holder else None
+        ),
+        "flags": [f.as_dict() for f in flags],
+        "decisive_count": sum(1 for f in flags if f.severity == "decisive"),
+    }
+
+
+class OfficerAction(BaseModel):
+    officer_id: str = Field(..., min_length=3)
+    action:     str = Field(..., description="forward | approve | reject | return")
+    remark:     str = ""
+    overrode:   List[str] = Field(default_factory=list)
+
+
+@app.post("/api/tickets/{seva_id}/action")
+def ticket_action(seva_id: str, decision: OfficerAction) -> Dict[str, Any]:
+    """
+    Record an officer's decision on a file.
+
+    An officer may overrule the engine. They may not do it silently: every
+    decisive flag has to be named and answered, the reason is stored against
+    their name, and `/api/overrides` counts how often they do it.
+
+    A refusal returns 422 with the offending field named, so the interface can
+    mark the control that needs attention rather than showing one message over
+    the whole form.
+    """
+    if not seva_id_valid(seva_id):
+        raise HTTPException(400, f"{seva_id} is not a valid Seva ID.")
+    ticket = STORE.get(seva_id)
+    if ticket is None:
+        raise HTTPException(404, f"No ticket with Seva ID {seva_id}")
+
+    officer = next(
+        (o for o in STORE.officers.all_officers()
+         if o.officer_id == decision.officer_id),
+        None,
+    )
+    if officer is None:
+        raise HTTPException(
+            404, f"No officer with id {decision.officer_id}"
+        )
+
+    try:
+        result = perform(
+            ticket, officer,
+            action=decision.action,
+            remark=decision.remark,
+            overrode=decision.overrode,
+            chain=STORE.chain(seva_id),
+        )
+    except OverrideRefused as refused:
+        return JSONResponse(
+            status_code=422,
+            content={"error": refused.message, "field": refused.field},
+        )
+
+    return {**result.as_dict(), "ticket": _ticket_detail(seva_id)}
 
 
 # ---------------------------------------------------------------------------
