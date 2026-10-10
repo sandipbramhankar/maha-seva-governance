@@ -1,0 +1,16 @@
+# Web layer
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.6.0
+python-dateutil>=2.8.2
+
+# Identity resolution across heterogeneous repositories.
+# Indian Patent Application 202621097866.
+# seva/engine/verification.py and seva/engine/fraud.py import this directly,
+# so the deploy fails at import without it.
+indicer-hetero-match @ git+https://github.com/sandipbramhankar/indicer-hetero-match.git@master
+
+# indicer's own runtime dependencies, pinned here so a Railway build is
+# reproducible even if the upstream metadata changes.
+indic-transliteration>=2.3.57
+jellyfish>=1.0.0
