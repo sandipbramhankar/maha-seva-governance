@@ -43,8 +43,6 @@ statutory period under the Maharashtra Right to Public Services Act, 2015.
 ## Running it
 
 ```bash
-git clone https://github.com/sandipbramhankar/indicer-hetero-match.git ../indicer-hetero-match
-pip install -e ../indicer-hetero-match
 pip install -r requirements-dev.txt
 
 python -m pytest -q                              # 68 tests
@@ -53,14 +51,17 @@ uvicorn seva.api.main:app --reload               # dashboard at http://127.0.0.1
 
 The dashboard is served at `/`, the JSON API under `/api/`.
 
+There is no separate install step for `indicer`: a copy of its runtime lives in
+`indicer/`, recorded in `indicer/VENDORED.md` with its upstream commit. The
+upstream repository is private, and vendoring means a build needs no access to
+it. Re-sync instructions are in that file.
+
 ### Deploying to Railway
 
 `Procfile` and `railway.json` both start `uvicorn seva.api.main:app`, with
-`/api/health` as the healthcheck. `runtime.txt` pins Python 3.11.
-
-`requirements.txt` installs `indicer` from GitHub. This matters: both
-`seva/engine/verification.py` and `seva/engine/fraud.py` import it at module
-level, so a build without it fails at import rather than at request time.
+`/api/health` as the healthcheck. `runtime.txt` pins Python 3.11. Nothing in
+the build reaches a private repository, so connecting the GitHub repo and
+deploying is all that is required.
 
 ---
 
@@ -222,6 +223,7 @@ seva/
 │   └── sla.py             RTS Act clock
 └── api/main.py            FastAPI app and static dashboard
 
+indicer/                   vendored identity-resolution engine (see VENDORED.md)
 web/                       dashboard (vanilla JS, no build step)
 tests/                     68 tests
 ```
